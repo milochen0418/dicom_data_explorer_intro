@@ -118,25 +118,12 @@ def _list_s3_objects(bucket: str, prefix: str) -> list[str]:
     return keys
 
 
-def _download_idc_series(series_aws_url: str, dest_dir: Path) -> None:
+def _get_idc_keys(series_aws_url: str) -> tuple[str, str, list[str]]:
     bucket, prefix = _parse_s3_url(series_aws_url)
-    _ensure_dir(dest_dir)
     keys = [key for key in _list_s3_objects(bucket, prefix) if not key.endswith("/")]
     if not keys:
         raise ValueError(f"No objects found for IDC series at {series_aws_url}")
-    prefix_path = Path(prefix)
-    for key in keys:
-        key_path = Path(key)
-        if prefix and key.startswith(prefix):
-            rel_path = key_path.relative_to(prefix_path)
-        else:
-            rel_path = Path(key_path.name)
-        dest_path = dest_dir / rel_path
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-        if dest_path.exists():
-            continue
-        url = f"https://{bucket}.s3.amazonaws.com/{key}"
-        _download_stream(url, dest_path)
+    return bucket, prefix, keys
 
 
 def _download_series(item: dict) -> None:
@@ -146,9 +133,6 @@ def _download_series(item: dict) -> None:
     series_dir = DOWNLOAD_ROOT / collection / _sanitize_segment(series_uid)
     if source == "TCIA":
         _download_tcia_series(series_uid, series_dir)
-    elif source == "IDC":
-        series_aws_url = item.get("series_aws_url", "")
-        _download_idc_series(series_aws_url, series_dir)
     else:
         raise ValueError(f"Unsupported source: {source}")
 
@@ -158,6 +142,10 @@ class DownloadState(rx.State):
     download_history: list[dict] = []
     is_downloading: bool = False
     download_progress: int = 0
+    total_files: int = 0
+    downloaded_files: int = 0
+    current_series_uid: str = ""
+    progress_message: str = ""
 
     @rx.var
     def cart_count(self) -> int:
@@ -202,24 +190,94 @@ class DownloadState(rx.State):
             return
         self.is_downloading = True
         self.download_progress = 0
-        total_items = len(self.cart_items)
-        completed_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.total_files = 0
+        self.downloaded_files = 0
+        self.current_series_uid = ""
+        self.progress_message = "Preparing download..."
+        idc_plan: dict[str, dict] = {}
+        yield
+        for item in self.cart_items:
+            source = item.get("source", "").upper()
+            if source == "IDC":
+                series_aws_url = item.get("series_aws_url", "")
+                try:
+                    bucket, prefix, keys = await asyncio.to_thread(
+                        _get_idc_keys, series_aws_url
+                    )
+                    idc_plan[item.get("SeriesInstanceUID", "")] = {
+                        "bucket": bucket,
+                        "prefix": prefix,
+                        "keys": keys,
+                    }
+                    self.total_files += len(keys)
+                except Exception as e:
+                    logging.exception("IDC listing failed for %s: %s", item, e)
+            else:
+                image_count = item.get("ImageCount")
+                self.total_files += int(image_count) if image_count else 1
+            yield
+        if self.total_files == 0:
+            self.total_files = len(self.cart_items)
+        self.progress_message = "Downloading..."
+        yield
         completed_items: list[dict] = []
-        for index, item in enumerate(self.cart_items, start=1):
+        for item in self.cart_items:
             try:
-                await asyncio.to_thread(_download_series, item)
+                source = item.get("source", "").upper()
+                self.current_series_uid = item.get("SeriesInstanceUID", "")
+                if source == "IDC":
+                    series_aws_url = item.get("series_aws_url", "")
+                    collection = _sanitize_segment(item.get("Collection", ""))
+                    series_dir = DOWNLOAD_ROOT / collection / _sanitize_segment(
+                        self.current_series_uid
+                    )
+                    plan = idc_plan.get(self.current_series_uid)
+                    if not plan:
+                        bucket, prefix, keys = await asyncio.to_thread(
+                            _get_idc_keys, series_aws_url
+                        )
+                        plan = {"bucket": bucket, "prefix": prefix, "keys": keys}
+                    prefix_path = Path(plan["prefix"])
+                    _ensure_dir(series_dir)
+                    for key in plan["keys"]:
+                        key_path = Path(key)
+                        if plan["prefix"] and key.startswith(plan["prefix"]):
+                            rel_path = key_path.relative_to(prefix_path)
+                        else:
+                            rel_path = Path(key_path.name)
+                        dest_path = series_dir / rel_path
+                        if not dest_path.exists():
+                            url = f"https://{plan['bucket']}.s3.amazonaws.com/{key}"
+                            await asyncio.to_thread(_download_stream, url, dest_path)
+                        self.downloaded_files += 1
+                        if self.total_files > 0:
+                            self.download_progress = int(
+                                self.downloaded_files / self.total_files * 100
+                            )
+                        yield
+                else:
+                    await asyncio.to_thread(_download_series, item)
+                    image_count = item.get("ImageCount")
+                    increment = int(image_count) if image_count else 1
+                    self.downloaded_files += increment
+                    if self.total_files > 0:
+                        self.download_progress = int(
+                            self.downloaded_files / self.total_files * 100
+                        )
                 history_item = item.copy()
-                history_item["downloaded_at"] = completed_time
+                history_item["downloaded_at"] = datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
                 completed_items.append(history_item)
             except Exception as e:
                 logging.exception("Download failed for %s: %s", item, e)
-            self.download_progress = int(index / total_items * 100)
             yield
-        completed_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for history_item in reversed(completed_items):
-            if "downloaded_at" not in history_item:
-                history_item["downloaded_at"] = completed_time
             self.download_history.insert(0, history_item)
         self.cart_items = []
         self.is_downloading = False
         self.download_progress = 0
+        self.total_files = 0
+        self.downloaded_files = 0
+        self.current_series_uid = ""
+        self.progress_message = ""

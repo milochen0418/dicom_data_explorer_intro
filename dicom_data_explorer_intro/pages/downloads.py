@@ -127,6 +127,21 @@ def downloads_content() -> rx.Component:
                                     class_name="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg hover:shadow-xl transition-all",
                                 ),
                             ),
+                            rx.cond(
+                                DownloadState.is_downloading,
+                                rx.el.div(
+                                    rx.el.p(
+                                        DownloadState.progress_message,
+                                        class_name="text-xs text-gray-500",
+                                    ),
+                                    rx.el.p(
+                                        f"{DownloadState.downloaded_files} / {DownloadState.total_files} files",
+                                        class_name="text-xs text-gray-600 font-medium",
+                                    ),
+                                    class_name="mt-2 flex items-center justify-between",
+                                ),
+                                None,
+                            ),
                             class_name="mt-6 p-6 bg-gray-50 rounded-xl border border-gray-200",
                         ),
                     ),
