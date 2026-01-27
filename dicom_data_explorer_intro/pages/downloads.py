@@ -117,7 +117,10 @@ def downloads_content() -> rx.Component:
                                 DownloadState.is_downloading,
                                 rx.el.div(
                                     rx.el.div(
-                                        class_name=f"h-2 bg-blue-600 rounded-full transition-all duration-300 w-[{DownloadState.download_progress}%]"
+                                        class_name="h-2 bg-blue-600 rounded-full transition-all duration-300",
+                                        style={
+                                            "width": f"{DownloadState.download_progress}%"
+                                        },
                                     ),
                                     class_name="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-2",
                                 ),
