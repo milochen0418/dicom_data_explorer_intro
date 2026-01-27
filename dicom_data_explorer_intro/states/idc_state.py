@@ -21,18 +21,78 @@ class IDCState(rx.State):
     page: int = 1
     items_per_page: int = 10
     selected_series_uid: str = ""
+    sort_field: str = "SeriesDate"
+    sort_direction: str = "desc"
+    search_query: str = ""
+    min_images: str = ""
+    max_images: str = ""
 
     @rx.var
     def total_pages(self) -> int:
         return (
-            len(self.series_results) + self.items_per_page - 1
+            len(self.filtered_results) + self.items_per_page - 1
         ) // self.items_per_page
 
     @rx.var
     def current_page_results(self) -> list[dict]:
         start = (self.page - 1) * self.items_per_page
         end = start + self.items_per_page
-        return self.series_results[start:end]
+        return self.filtered_results[start:end]
+
+    @rx.var
+    def filtered_results(self) -> list[dict]:
+        results = self.series_results
+        query = self.search_query.strip().lower()
+        if query:
+            def matches(item: dict) -> bool:
+                haystack = " ".join(
+                    str(item.get(field, ""))
+                    for field in [
+                        "Collection",
+                        "SeriesDescription",
+                        "SeriesInstanceUID",
+                        "Modality",
+                        "BodyPartExamined",
+                    ]
+                ).lower()
+                return query in haystack
+
+            results = [item for item in results if matches(item)]
+
+        def parse_int(value: str) -> int | None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        min_val = parse_int(self.min_images)
+        max_val = parse_int(self.max_images)
+        if min_val is not None:
+            results = [
+                item
+                for item in results
+                if int(item.get("ImageCount") or 0) >= min_val
+            ]
+        if max_val is not None:
+            results = [
+                item
+                for item in results
+                if int(item.get("ImageCount") or 0) <= max_val
+            ]
+
+        sort_key = self.sort_field
+        reverse = self.sort_direction == "desc"
+
+        def key_func(item: dict):
+            value = item.get(sort_key, "")
+            if sort_key == "ImageCount":
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    return 0
+            return value or ""
+
+        return sorted(results, key=key_func, reverse=reverse)
 
     @rx.var
     def selected_series_details(self) -> dict:
@@ -67,6 +127,32 @@ class IDCState(rx.State):
             self.selected_modality = value
         elif key == "body_part":
             self.selected_body_part = value
+        self.page = 1
+
+    @rx.event
+    def update_search_query(self, value: str):
+        self.search_query = value
+        self.page = 1
+
+    @rx.event
+    def update_min_images(self, value: str):
+        self.min_images = value
+        self.page = 1
+
+    @rx.event
+    def update_max_images(self, value: str):
+        self.max_images = value
+        self.page = 1
+
+    @rx.event
+    def update_sort_field(self, value: str):
+        self.sort_field = value
+        self.page = 1
+
+    @rx.event
+    def update_sort_direction(self, value: str):
+        self.sort_direction = value
+        self.page = 1
 
     @rx.event
     def search_data(self):
@@ -90,6 +176,11 @@ class IDCState(rx.State):
         self.selected_collection = ""
         self.selected_modality = ""
         self.selected_body_part = ""
+        self.search_query = ""
+        self.min_images = ""
+        self.max_images = ""
+        self.sort_field = "SeriesDate"
+        self.sort_direction = "desc"
         self.series_results = []
         self.search_performed = False
         self.page = 1

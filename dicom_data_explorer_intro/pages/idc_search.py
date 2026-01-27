@@ -182,6 +182,75 @@ def results_view() -> rx.Component:
             ),
             class_name="flex justify-between items-end mb-6",
         ),
+        rx.el.div(
+            rx.el.div(
+                rx.el.label(
+                    "Search",
+                    class_name="block text-xs font-medium text-gray-600 mb-1",
+                ),
+                rx.el.input(
+                    value=IDCState.search_query,
+                    on_change=IDCState.update_search_query,
+                    placeholder="Collection, UID, description...",
+                    class_name="w-full rounded-lg border-gray-300 border p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500",
+                ),
+                class_name="flex-1",
+            ),
+            rx.el.div(
+                rx.el.label(
+                    "Min Images",
+                    class_name="block text-xs font-medium text-gray-600 mb-1",
+                ),
+                rx.el.input(
+                    value=IDCState.min_images,
+                    on_change=IDCState.update_min_images,
+                    placeholder="0",
+                    type="number",
+                    class_name="w-28 rounded-lg border-gray-300 border p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500",
+                ),
+            ),
+            rx.el.div(
+                rx.el.label(
+                    "Max Images",
+                    class_name="block text-xs font-medium text-gray-600 mb-1",
+                ),
+                rx.el.input(
+                    value=IDCState.max_images,
+                    on_change=IDCState.update_max_images,
+                    placeholder="9999",
+                    type="number",
+                    class_name="w-28 rounded-lg border-gray-300 border p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500",
+                ),
+            ),
+            rx.el.div(
+                rx.el.label(
+                    "Sort By",
+                    class_name="block text-xs font-medium text-gray-600 mb-1",
+                ),
+                rx.el.select(
+                    rx.el.option("Date", value="SeriesDate"),
+                    rx.el.option("Images", value="ImageCount"),
+                    rx.el.option("Modality", value="Modality"),
+                    value=IDCState.sort_field,
+                    on_change=IDCState.update_sort_field,
+                    class_name="w-36 rounded-lg border-gray-300 border p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white",
+                ),
+            ),
+            rx.el.div(
+                rx.el.label(
+                    "Order",
+                    class_name="block text-xs font-medium text-gray-600 mb-1",
+                ),
+                rx.el.select(
+                    rx.el.option("Desc", value="desc"),
+                    rx.el.option("Asc", value="asc"),
+                    value=IDCState.sort_direction,
+                    on_change=IDCState.update_sort_direction,
+                    class_name="w-28 rounded-lg border-gray-300 border p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white",
+                ),
+            ),
+            class_name="flex flex-wrap items-end gap-4 mb-6",
+        ),
         rx.cond(
             IDCState.is_loading,
             rx.el.div(
