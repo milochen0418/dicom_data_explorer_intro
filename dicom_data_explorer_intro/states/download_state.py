@@ -2,6 +2,155 @@ import reflex as rx
 from datetime import datetime
 import asyncio
 import logging
+from pathlib import Path
+import zipfile
+import xml.etree.ElementTree as ET
+from urllib.parse import urlparse
+
+import requests
+from dicom_data_explorer_intro.services.tcia_service import TCIA_BASE_URL
+
+
+DOWNLOAD_ROOT = Path("/Users/Shared/DICOM")
+
+
+def _sanitize_segment(value: str) -> str:
+    if not value:
+        return "unknown"
+    safe = str(value).strip().replace("/", "_").replace("\\", "_")
+    return safe or "unknown"
+
+
+def _ensure_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _download_stream(url: str, dest_path: Path) -> None:
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(url, stream=True, timeout=(10, 120)) as response:
+        response.raise_for_status()
+        with open(dest_path, "wb") as handle:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    handle.write(chunk)
+
+
+def _download_tcia_series(series_uid: str, dest_dir: Path) -> None:
+    if not series_uid:
+        raise ValueError("Missing SeriesInstanceUID for TCIA download")
+    _ensure_dir(dest_dir)
+    url = f"{TCIA_BASE_URL}/getImage"
+    params = {"SeriesInstanceUID": series_uid, "format": "zip"}
+    zip_path = dest_dir / f"{series_uid}.zip"
+    with requests.get(url, params=params, stream=True, timeout=(10, 300)) as response:
+        response.raise_for_status()
+        with open(zip_path, "wb") as handle:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    handle.write(chunk)
+    if not zip_path.exists() or zip_path.stat().st_size == 0:
+        raise ValueError("TCIA download returned empty content")
+    if not zipfile.is_zipfile(zip_path):
+        preview = zip_path.read_bytes()[:4096]
+        logging.error(
+            "TCIA response is not a ZIP. First bytes: %s", preview.decode("utf-8", "ignore")
+        )
+        raise ValueError("TCIA response is not a ZIP file")
+    extracted_files = 0
+    with zipfile.ZipFile(zip_path, "r") as archive:
+        members = archive.namelist()
+        archive.extractall(dest_dir)
+        extracted_files = len(members)
+    if extracted_files == 0:
+        logging.warning("TCIA ZIP contained no files for %s", series_uid)
+    else:
+        zip_path.unlink(missing_ok=True)
+
+
+def _normalize_s3_prefix(prefix: str) -> str:
+    cleaned = prefix.replace("*", "")
+    return cleaned
+
+
+def _parse_s3_url(series_aws_url: str) -> tuple[str, str]:
+    if not series_aws_url:
+        raise ValueError("Missing series_aws_url for IDC download")
+    parsed = urlparse(series_aws_url)
+    if parsed.scheme == "s3":
+        bucket = parsed.netloc
+        prefix = _normalize_s3_prefix(parsed.path.lstrip("/"))
+        return bucket, prefix
+    if parsed.scheme in {"http", "https"}:
+        host = parsed.netloc
+        if host.endswith(".s3.amazonaws.com"):
+            bucket = host.split(".s3.amazonaws.com")[0]
+            prefix = _normalize_s3_prefix(parsed.path.lstrip("/"))
+            return bucket, prefix
+        if host == "s3.amazonaws.com":
+            path_parts = parsed.path.lstrip("/").split("/", 1)
+            bucket = path_parts[0]
+            prefix = _normalize_s3_prefix(path_parts[1] if len(path_parts) > 1 else "")
+            return bucket, prefix
+    raise ValueError(f"Unsupported series_aws_url format: {series_aws_url}")
+
+
+def _list_s3_objects(bucket: str, prefix: str) -> list[str]:
+    keys: list[str] = []
+    continuation: str | None = None
+    while True:
+        params = {"list-type": "2", "prefix": prefix}
+        if continuation:
+            params["continuation-token"] = continuation
+        response = requests.get(
+            f"https://{bucket}.s3.amazonaws.com",
+            params=params,
+            timeout=(10, 120),
+        )
+        response.raise_for_status()
+        root = ET.fromstring(response.text)
+        for key_node in root.findall(".//{*}Contents/{*}Key"):
+            if key_node.text:
+                keys.append(key_node.text)
+        token_node = root.find(".//{*}NextContinuationToken")
+        if token_node is None or not token_node.text:
+            break
+        continuation = token_node.text
+    return keys
+
+
+def _download_idc_series(series_aws_url: str, dest_dir: Path) -> None:
+    bucket, prefix = _parse_s3_url(series_aws_url)
+    _ensure_dir(dest_dir)
+    keys = [key for key in _list_s3_objects(bucket, prefix) if not key.endswith("/")]
+    if not keys:
+        raise ValueError(f"No objects found for IDC series at {series_aws_url}")
+    prefix_path = Path(prefix)
+    for key in keys:
+        key_path = Path(key)
+        if prefix and key.startswith(prefix):
+            rel_path = key_path.relative_to(prefix_path)
+        else:
+            rel_path = Path(key_path.name)
+        dest_path = dest_dir / rel_path
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        if dest_path.exists():
+            continue
+        url = f"https://{bucket}.s3.amazonaws.com/{key}"
+        _download_stream(url, dest_path)
+
+
+def _download_series(item: dict) -> None:
+    source = item.get("source", "").upper()
+    series_uid = item.get("SeriesInstanceUID", "")
+    collection = _sanitize_segment(item.get("Collection", ""))
+    series_dir = DOWNLOAD_ROOT / collection / _sanitize_segment(series_uid)
+    if source == "TCIA":
+        _download_tcia_series(series_uid, series_dir)
+    elif source == "IDC":
+        series_aws_url = item.get("series_aws_url", "")
+        _download_idc_series(series_aws_url, series_dir)
+    else:
+        raise ValueError(f"Unsupported source: {source}")
 
 
 class DownloadState(rx.State):
@@ -48,20 +197,28 @@ class DownloadState(rx.State):
 
     @rx.event
     async def start_download(self):
-        """Simulate download process."""
+        """Download selected series and store DICOM files locally."""
         if not self.cart_items:
             return
         self.is_downloading = True
         self.download_progress = 0
-        for i in range(1, 101, 10):
-            self.download_progress = i
-            await asyncio.sleep(0.2)
-            yield
-        self.download_progress = 100
+        total_items = len(self.cart_items)
         completed_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        for item in self.cart_items:
-            history_item = item.copy()
-            history_item["downloaded_at"] = completed_time
+        completed_items: list[dict] = []
+        for index, item in enumerate(self.cart_items, start=1):
+            try:
+                await asyncio.to_thread(_download_series, item)
+                history_item = item.copy()
+                history_item["downloaded_at"] = completed_time
+                completed_items.append(history_item)
+            except Exception as e:
+                logging.exception("Download failed for %s: %s", item, e)
+            self.download_progress = int(index / total_items * 100)
+            yield
+        completed_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for history_item in reversed(completed_items):
+            if "downloaded_at" not in history_item:
+                history_item["downloaded_at"] = completed_time
             self.download_history.insert(0, history_item)
         self.cart_items = []
         self.is_downloading = False
