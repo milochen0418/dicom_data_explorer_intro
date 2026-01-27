@@ -2,6 +2,7 @@ import reflex as rx
 from datetime import datetime
 import asyncio
 import logging
+import os
 from pathlib import Path
 import zipfile
 import xml.etree.ElementTree as ET
@@ -11,7 +12,7 @@ import requests
 from dicom_data_explorer_intro.services.tcia_service import TCIA_BASE_URL
 
 
-DOWNLOAD_ROOT = Path("/Users/Shared/DICOM")
+DOWNLOAD_ROOT = Path(os.getenv("PUBLIC_DICOM_DIR", "/Users/Shared/DICOM"))
 
 
 def _sanitize_segment(value: str) -> str:

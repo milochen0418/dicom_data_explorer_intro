@@ -7,4 +7,10 @@ assets/external/
 .states/
 __pycache__/
 /app/__pycache__/
+
+# Ignore uploaded files
 uploaded_files/
+
+# Ignore environment variable files
+.env
+
