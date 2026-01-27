@@ -14,3 +14,5 @@ uploaded_files/
 # Ignore environment variable files
 .env
 
+# Ignore macOS system files
+.DS_Store
