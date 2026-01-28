@@ -135,13 +135,19 @@ class IDCState(rx.State):
         self.page = 1
 
     @rx.event
-    def update_min_images(self, value: str):
-        self.min_images = value
+    def update_min_images(self, value: float):
+        try:
+            self.min_images = str(int(value))
+        except (TypeError, ValueError):
+            self.min_images = ""
         self.page = 1
 
     @rx.event
-    def update_max_images(self, value: str):
-        self.max_images = value
+    def update_max_images(self, value: float):
+        try:
+            self.max_images = str(int(value))
+        except (TypeError, ValueError):
+            self.max_images = ""
         self.page = 1
 
     @rx.event
