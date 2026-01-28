@@ -38,8 +38,6 @@ def sidebar() -> rx.Component:
                     class_name="text-xs font-bold text-gray-400 px-4 mb-2 tracking-wider",
                 ),
                 sidebar_item("Welcome", "layout-dashboard", "/"),
-                sidebar_item("Collections", "database", "/collections"),
-                sidebar_item("TCIA Search", "search", "/search"),
                 sidebar_item("IDC Search", "cloud-drizzle", "/idc-search"),
                 rx.el.div(
                     sidebar_item("Downloads", "download", "/downloads"),

@@ -4,12 +4,10 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-import zipfile
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 
 import requests
-from dicom_data_explorer_intro.services.tcia_service import TCIA_BASE_URL
 
 
 DOWNLOAD_ROOT = Path(os.getenv("PUBLIC_DICOM_DIR", "/Users/Shared/DICOM"))
@@ -34,38 +32,6 @@ def _download_stream(url: str, dest_path: Path) -> None:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
                 if chunk:
                     handle.write(chunk)
-
-
-def _download_tcia_series(series_uid: str, dest_dir: Path) -> None:
-    if not series_uid:
-        raise ValueError("Missing SeriesInstanceUID for TCIA download")
-    _ensure_dir(dest_dir)
-    url = f"{TCIA_BASE_URL}/getImage"
-    params = {"SeriesInstanceUID": series_uid, "format": "zip"}
-    zip_path = dest_dir / f"{series_uid}.zip"
-    with requests.get(url, params=params, stream=True, timeout=(10, 300)) as response:
-        response.raise_for_status()
-        with open(zip_path, "wb") as handle:
-            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    handle.write(chunk)
-    if not zip_path.exists() or zip_path.stat().st_size == 0:
-        raise ValueError("TCIA download returned empty content")
-    if not zipfile.is_zipfile(zip_path):
-        preview = zip_path.read_bytes()[:4096]
-        logging.error(
-            "TCIA response is not a ZIP. First bytes: %s", preview.decode("utf-8", "ignore")
-        )
-        raise ValueError("TCIA response is not a ZIP file")
-    extracted_files = 0
-    with zipfile.ZipFile(zip_path, "r") as archive:
-        members = archive.namelist()
-        archive.extractall(dest_dir)
-        extracted_files = len(members)
-    if extracted_files == 0:
-        logging.warning("TCIA ZIP contained no files for %s", series_uid)
-    else:
-        zip_path.unlink(missing_ok=True)
 
 
 def _normalize_s3_prefix(prefix: str) -> str:
@@ -125,17 +91,6 @@ def _get_idc_keys(series_aws_url: str) -> tuple[str, str, list[str]]:
     if not keys:
         raise ValueError(f"No objects found for IDC series at {series_aws_url}")
     return bucket, prefix, keys
-
-
-def _download_series(item: dict) -> None:
-    source = item.get("source", "").upper()
-    series_uid = item.get("SeriesInstanceUID", "")
-    collection = _sanitize_segment(item.get("Collection", ""))
-    series_dir = DOWNLOAD_ROOT / collection / _sanitize_segment(series_uid)
-    if source == "TCIA":
-        _download_tcia_series(series_uid, series_dir)
-    else:
-        raise ValueError(f"Unsupported source: {source}")
 
 
 class DownloadState(rx.State):
@@ -214,8 +169,7 @@ class DownloadState(rx.State):
                 except Exception as e:
                     logging.exception("IDC listing failed for %s: %s", item, e)
             else:
-                image_count = item.get("ImageCount")
-                self.total_files += int(image_count) if image_count else 1
+                logging.warning("Unsupported source in cart: %s", source)
             yield
         if self.total_files == 0:
             self.total_files = len(self.cart_items)
@@ -226,45 +180,39 @@ class DownloadState(rx.State):
             try:
                 source = item.get("source", "").upper()
                 self.current_series_uid = item.get("SeriesInstanceUID", "")
-                if source == "IDC":
-                    series_aws_url = item.get("series_aws_url", "")
-                    collection = _sanitize_segment(item.get("Collection", ""))
-                    series_dir = DOWNLOAD_ROOT / collection / _sanitize_segment(
-                        self.current_series_uid
+                if source != "IDC":
+                    logging.warning("Skipping unsupported source: %s", source)
+                    yield
+                    continue
+                series_aws_url = item.get("series_aws_url", "")
+                collection = _sanitize_segment(item.get("Collection", ""))
+                series_dir = DOWNLOAD_ROOT / collection / _sanitize_segment(
+                    self.current_series_uid
+                )
+                plan = idc_plan.get(self.current_series_uid)
+                if not plan:
+                    bucket, prefix, keys = await asyncio.to_thread(
+                        _get_idc_keys, series_aws_url
                     )
-                    plan = idc_plan.get(self.current_series_uid)
-                    if not plan:
-                        bucket, prefix, keys = await asyncio.to_thread(
-                            _get_idc_keys, series_aws_url
-                        )
-                        plan = {"bucket": bucket, "prefix": prefix, "keys": keys}
-                    prefix_path = Path(plan["prefix"])
-                    _ensure_dir(series_dir)
-                    for key in plan["keys"]:
-                        key_path = Path(key)
-                        if plan["prefix"] and key.startswith(plan["prefix"]):
-                            rel_path = key_path.relative_to(prefix_path)
-                        else:
-                            rel_path = Path(key_path.name)
-                        dest_path = series_dir / rel_path
-                        if not dest_path.exists():
-                            url = f"https://{plan['bucket']}.s3.amazonaws.com/{key}"
-                            await asyncio.to_thread(_download_stream, url, dest_path)
-                        self.downloaded_files += 1
-                        if self.total_files > 0:
-                            self.download_progress = int(
-                                self.downloaded_files / self.total_files * 100
-                            )
-                        yield
-                else:
-                    await asyncio.to_thread(_download_series, item)
-                    image_count = item.get("ImageCount")
-                    increment = int(image_count) if image_count else 1
-                    self.downloaded_files += increment
+                    plan = {"bucket": bucket, "prefix": prefix, "keys": keys}
+                prefix_path = Path(plan["prefix"])
+                _ensure_dir(series_dir)
+                for key in plan["keys"]:
+                    key_path = Path(key)
+                    if plan["prefix"] and key.startswith(plan["prefix"]):
+                        rel_path = key_path.relative_to(prefix_path)
+                    else:
+                        rel_path = Path(key_path.name)
+                    dest_path = series_dir / rel_path
+                    if not dest_path.exists():
+                        url = f"https://{plan['bucket']}.s3.amazonaws.com/{key}"
+                        await asyncio.to_thread(_download_stream, url, dest_path)
+                    self.downloaded_files += 1
                     if self.total_files > 0:
                         self.download_progress = int(
                             self.downloaded_files / self.total_files * 100
                         )
+                    yield
                 history_item = item.copy()
                 history_item["downloaded_at"] = datetime.now().strftime(
                     "%Y-%m-%d %H:%M:%S"

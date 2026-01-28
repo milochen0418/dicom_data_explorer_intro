@@ -5,12 +5,10 @@
 - [x] Build onboarding modal/tutorial explaining DICOM terminology (Collection, Study, Series, Instance)
 - [x] Design welcome page with guided workflow introduction
 - [x] Implement interactive tooltips system for explaining UI elements
-- [x] Add data source selection cards (TCIA/NBIA and IDC)
+- [x] Add data source selection cards (IDC)
 
-## Phase 2: TCIA/NBIA Integration and Search Interface ✅
-- [x] Implement TCIA API client with public REST endpoints
-- [x] Create Collections browser with filtering capabilities
-- [x] Build guided search interface for Modality, Body Part, Cancer Type filtering
+## Phase 2: IDC Search Interface ✅
+- [x] Build guided search interface for Modality, Body Part, and text filtering
 - [x] Display search results in a clean, beginner-friendly table/card view
 - [x] Add metadata preview panel for selected series
 

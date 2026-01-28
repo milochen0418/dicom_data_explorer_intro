@@ -91,7 +91,7 @@ def welcome_page() -> rx.Component:
             ),
             rx.el.div(
                 step_card(
-                    "1", "Choose Source", "Select a public repository like TCIA or IDC."
+                    "1", "Choose Source", "Select a public repository like IDC."
                 ),
                 step_card(
                     "2", "Browse Data", "Filter by body part, modality, or disease."
@@ -115,18 +115,11 @@ def welcome_page() -> rx.Component:
             ),
             rx.el.div(
                 data_source_card(
-                    "TCIA",
-                    "TCIA (The Cancer Imaging Archive)",
-                    "Best for curated collections organized by cancer type. Great for finding specific clinical datasets.",
-                    ["Cancer Focused", "Curated", "Classic REST API"],
-                    recommended=True,
-                    link="/search",
-                ),
-                data_source_card(
                     "IDC",
                     "NCI Imaging Data Commons",
                     "A cloud-native repository with powerful search capabilities across vast amounts of data.",
                     ["Cloud Native", "Big Data", "Advanced Search"],
+                    recommended=True,
                     link="/idc-search",
                 ),
                 class_name="grid grid-cols-1 lg:grid-cols-2 gap-6",

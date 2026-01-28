@@ -154,8 +154,8 @@ def downloads_content() -> rx.Component:
                         ),
                         rx.el.p("Your cart is empty", class_name="text-gray-500"),
                         rx.el.a(
-                            "Browse Collections",
-                            href="/collections",
+                            "Browse IDC",
+                            href="/idc-search",
                             class_name="mt-4 text-blue-600 font-medium hover:underline",
                         ),
                         class_name="flex flex-col items-center justify-center py-12 bg-white rounded-xl border border-dashed border-gray-300",
