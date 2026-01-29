@@ -1,4 +1,4 @@
-# DICOM data explorer - intro
+# DICOM data explorer
 
 ## App Overview
 
@@ -28,7 +28,7 @@ Review your cart and start downloads with progress feedback.
 
 We’ve added a software design document to share the architecture and roadmap. Please reference it and join the open-source development efforts.
 
-[docs/DICOM Data Explorer (Intro) — Software Design Document.pdf](docs/DICOM%20Data%20Explorer%20(Intro)%20%E2%80%94%20Software%20Design%20Document.pdf)
+[docs/DICOM Data Explorer — Software Design Document (Intro).pdf](docs/DICOM%20Data%20Explorer%20(Intro)%20%E2%80%94%20Software%20Design%20Document.pdf)
 
 ## Getting Started
 

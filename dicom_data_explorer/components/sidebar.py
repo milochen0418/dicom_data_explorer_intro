@@ -1,6 +1,6 @@
 import reflex as rx
-from dicom_data_explorer_intro.states.ui_state import UIState
-from dicom_data_explorer_intro.states.download_state import DownloadState
+from dicom_data_explorer.states.ui_state import UIState
+from dicom_data_explorer.states.download_state import DownloadState
 
 
 def sidebar_item(text: str, icon: str, href: str) -> rx.Component:

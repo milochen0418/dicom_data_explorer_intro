@@ -1,9 +1,9 @@
 import reflex as rx
-from dicom_data_explorer_intro.pages.welcome import welcome_page
-from dicom_data_explorer_intro.pages.idc_search import idc_search_page
-from dicom_data_explorer_intro.pages.downloads import downloads_page
-from dicom_data_explorer_intro.states.idc_state import IDCState
-from dicom_data_explorer_intro.components.layout import layout
+from dicom_data_explorer.pages.welcome import welcome_page
+from dicom_data_explorer.pages.idc_search import idc_search_page
+from dicom_data_explorer.pages.downloads import downloads_page
+from dicom_data_explorer.states.idc_state import IDCState
+from dicom_data_explorer.components.layout import layout
 
 
 def index() -> rx.Component:

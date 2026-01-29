@@ -1,6 +1,6 @@
 import reflex as rx
-from dicom_data_explorer_intro.components.sidebar import sidebar
-from dicom_data_explorer_intro.components.onboarding import onboarding_modal
+from dicom_data_explorer.components.sidebar import sidebar
+from dicom_data_explorer.components.onboarding import onboarding_modal
 
 
 def layout(content: rx.Component) -> rx.Component:

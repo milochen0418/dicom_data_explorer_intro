@@ -1,5 +1,5 @@
 import reflex as rx
-from dicom_data_explorer_intro.services.idc_service import (
+from dicom_data_explorer.services.idc_service import (
     fetch_collections,
     fetch_modalities,
     fetch_body_parts,

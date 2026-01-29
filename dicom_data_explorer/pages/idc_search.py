@@ -1,8 +1,8 @@
 import reflex as rx
-from dicom_data_explorer_intro.states.idc_state import IDCState
-from dicom_data_explorer_intro.states.download_state import DownloadState
-from dicom_data_explorer_intro.components.layout import layout
-from dicom_data_explorer_intro.components.tooltip import helper_tooltip
+from dicom_data_explorer.states.idc_state import IDCState
+from dicom_data_explorer.states.download_state import DownloadState
+from dicom_data_explorer.components.layout import layout
+from dicom_data_explorer.components.tooltip import helper_tooltip
 
 
 def filter_sidebar() -> rx.Component:

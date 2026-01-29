@@ -1,9 +1,9 @@
 [tool.poetry]
-name = "dicom-data-explorer-intro"
+name = "dicom-data-explorer"
 version = "0.1.0"
-description = "DICOM data explorer intro app"
+description = "DICOM data explorer app"
 readme = "README.md"
-packages = [{ include = "dicom_data_explorer_intro" }]
+packages = [{ include = "dicom_data_explorer" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"

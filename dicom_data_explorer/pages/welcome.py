@@ -1,6 +1,6 @@
 import reflex as rx
-from dicom_data_explorer_intro.states.ui_state import UIState
-from dicom_data_explorer_intro.components.tooltip import helper_tooltip
+from dicom_data_explorer.states.ui_state import UIState
+from dicom_data_explorer.components.tooltip import helper_tooltip
 
 
 def step_card(number: str, title: str, description: str) -> rx.Component:

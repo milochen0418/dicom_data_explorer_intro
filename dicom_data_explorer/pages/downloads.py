@@ -1,6 +1,6 @@
 import reflex as rx
-from dicom_data_explorer_intro.states.download_state import DownloadState
-from dicom_data_explorer_intro.components.layout import layout
+from dicom_data_explorer.states.download_state import DownloadState
+from dicom_data_explorer.components.layout import layout
 
 
 def cart_item(item: dict) -> rx.Component:

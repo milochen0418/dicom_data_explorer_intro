@@ -1,5 +1,5 @@
 import reflex as rx
-from dicom_data_explorer_intro.states.ui_state import UIState
+from dicom_data_explorer.states.ui_state import UIState
 
 
 def onboarding_modal() -> rx.Component:

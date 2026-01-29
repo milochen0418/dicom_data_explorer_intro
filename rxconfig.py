@@ -1,7 +1,7 @@
 import reflex as rx
 
 config = rx.Config(
-	app_name="dicom_data_explorer_intro",
+	app_name="dicom_data_explorer",
 	plugins=[
 		rx.plugins.TailwindV3Plugin(),
 		rx.plugins.sitemap.SitemapPlugin(),
